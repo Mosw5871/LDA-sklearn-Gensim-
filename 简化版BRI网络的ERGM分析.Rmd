@@ -1,0 +1,147 @@
+---
+title: "简化版BRI网络的ERGM分析"
+author: "寞"
+date: "2023-09-16"
+output: html_document
+---
+
+```{r}
+library(statnet)
+```
+
+
+```{r}
+data <- read.csv('332纯媒体全部邻接名单（不带自环）.csv') # 边列表
+data
+```
+
+
+```{r}
+# 转换成边列表（邻接名单）的形式，as.matrix()在这里还是起到了转换成可以处理的邻接名单形式
+data_matrix <- as.matrix(data)
+# data_matrix
+```
+
+```{r}
+data_network <- as.network(data_matrix, directed = TRUE, multiple = TRUE) # 转换成网络时，保留边的权重：multiple = TRUE
+data_network
+```
+
+
+```{r}
+network.density(data_network)
+```
+
+
+```{r}
+# data_network添加属性数据，读取存储着属性的文件
+attribute <- read.csv('332家媒体节点属性.csv')
+```
+
+
+```{r}
+# 下面的代码就是把属性添加到节点上
+data_network %v% 'sentiment' <- attribute$sentilean
+data_network %v% 'country' <- attribute$country
+data_network %v% 'inregion' <- attribute$inregion
+data_network
+```
+
+
+```{r}
+set.seed(001)
+data_network_model1 <- ergm(data_network ~ edges)
+summary(data_network_model1)
+```
+
+
+```{r}
+set.seed(001)
+data_network_model2 <- ergm(data_network ~ edges + mutual + gwdsp(0.25, fixed=T))
+summary(data_network_model2)
+```
+
+
+```{r}
+set.seed(001)
+data_network_model3 <- ergm(data_network ~ edges + mutual + gwdsp(0.25, fixed = T) +
+                              nodeifactor('sentiment', base = 2) + nodeofactor('sentiment', base = 2) +
+                              nodeifactor('inregion', base = 2) + nodeofactor('inregion', base = 2) +
+                              nodematch('sentiment', diff = T) +
+                              nodematch('country') +
+                              nodematch('inregion'))
+
+summary(data_network_model3)
+```
+
+
+```{r}
+set.seed(001)
+data_network_model4 <- ergm(data_network ~ edges + mutual + gwdsp(0.25, fixed = T) +
+                              nodeifactor('sentiment', base = 2) + nodeofactor('sentiment', base = 2) +
+                              nodematch('sentiment', diff = T) +
+                              nodematch('country') +
+                              nodematch('inregion', diff = T))
+
+summary(data_network_model4)
+```
+
+
+```{r}
+# 模型拟合优度检验
+data_network_model3_gof <- gof(data_network_model3)
+data_network_model3_gof
+plot(data_network_model3_gof)
+```
+
+
+```{r}
+# 模型诊断
+par(mar = c(2.1, 2.1, 2.1, 2.1))
+mcmc.diagnostics(data_network_model3)
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+

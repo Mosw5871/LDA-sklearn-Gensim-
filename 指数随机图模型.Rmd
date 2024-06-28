@@ -1,0 +1,136 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Methods for Network Analysis <https://bookdown.org/markhoff/social_network_analysis/>
+
+```{r}
+library(statnet)
+```
+
+
+```{r}
+data <- read.csv('1551用户边列表.csv') # 边列表
+data
+```
+
+
+```{r}
+# 转换成边列表（邻接名单）的形式，as.matrix()在这里还是起到了转换成可以处理的邻接名单形式
+data_matrix <- as.matrix(data)
+# data_matrix
+```
+
+
+```{r}
+data_network <- as.network(data_matrix, directed = TRUE, multiple = F) # 转换成网络时，保留边的权重：multiple = TRUE
+data_network
+```
+
+
+```{r}
+# data_network添加属性数据，读取存储着属性的文件
+attribute <- read.csv('1551用户个人信息.csv')
+```
+
+```{r}
+attribute$followers_count <- log(attribute$followers_count + 1)
+attribute$following_count <- log(attribute$following_count + 1)
+attribute$tweet_count <- log(attribute$tweet_count + 1)
+attribute$textcount <- log(attribute$textcount + 1)
+attribute$sumpopular <- log(attribute$sumpopular + 1)
+```
+
+
+
+```{r}
+# 下面的代码就是把属性添加到节点上
+data_network %v% 'sentiment' <- attribute$compound
+data_network %v% 'polarization' <- attribute$polarization
+data_network %v% 'followers_count' <- attribute$followers_count
+data_network %v% 'following_count' <- attribute$following_count
+data_network %v% 'tweet_count' <- attribute$tweet_count
+data_network %v% 'textcount' <- attribute$textcount
+data_network %v% 'sumpopular' <- attribute$sumpopular
+data_network %v% 'verified' <- attribute$verified
+```
+
+
+```{r}
+data_network
+```
+
+
+```{r}
+summary(data_network ~ edges + mutual +
+          triangle + transitive  + gwdsp(0.25, fixed=T) + 
+          nodeicov('sentiment') + 
+          nodeocov('sentiment') + 
+          nodematch('sentiment', diff = T) + 
+          nodematch('sentiment'))
+```
+
+```{r}
+summary(data_network ~ edges + mutual +
+          triangle + transitive + gwesp(0.5, fixed=T) + 
+          nodeifactor('polarization', levels = 1) + 
+          nodeofactor('polarization', levels = 1) + 
+          nodematch('polarization', diff = T) + 
+          nodematch('polarization'))
+```
+
+
+```{r}
+set.seed(001)
+data_network_model <- ergm(data_network ~ edges + mutual + 
+                              nodeicov('sentiment') + 
+                              nodeocov('sentiment') +
+                              nodematch('polarization', diff = T))
+
+summary(data_network_model)
+```
+
+```{r}
+set.seed(001)
+data_network_model <- ergm(data_network ~ edges + mutual('polarization', diff = T) + 
+                              nodeicov('sentiment') + 
+                              nodeocov('sentiment') +
+                              nodematch('polarization', diff = T))
+
+summary(data_network_model)
+```
+
+```{r}
+set.seed(001)
+data_network_model2 <- ergm(data_network ~ edges + mutual + 
+                              nodeicov('sentiment') + nodeocov('sentiment') + 
+                              nodeicov('followers_count') + nodeocov('followers_count') + 
+                              nodeicov('following_count') + nodeocov('following_count') + 
+                              nodeicov('tweet_count') + nodeocov('tweet_count') + 
+                              nodeicov('textcount') + nodeocov('textcount') + 
+                              nodeicov('sumpopular') + nodeocov('sumpopular') + 
+                              nodematch('polarization', diff = T))
+
+summary(data_network_model2)
+```
+
+
+```{r}
+# 模型拟合优度检验
+data_network_model_gof <- gof(data_network_model)
+data_network_model_gof
+plot(data_network_model_gof)
+```
+
+
+```{r}
+# 模型诊断
+par(mar = c(2.1, 2.1, 2.1, 2.1))
+mcmc.diagnostics(data_network_model2)
+```
+
+
+```{r}
+```
+

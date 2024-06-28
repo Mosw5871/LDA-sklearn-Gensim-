@@ -1,0 +1,277 @@
+---
+title: "一带一路指数随机图建模"
+author: "寞"
+date: "2023-08-23"
+output:
+  html_document: default
+---
+
+[一个还不错的教程可以稍微参考](https://bookdown.org/markhoff/social_network_analysis/homophily-and-exponential-random-graphs-ergm.html)
+
+[另一个还不错的Rpubs教程也可以参考](https://rpubs.com/jmmcclu3/880076)
+
+# 加载需要的程序包
+
+```{r}
+library(statnet)
+# library(igraph)
+```
+
+# 读取数据
+
+```{r}
+data <- read.csv('332纯媒体全部邻接名单（不带自环）.csv') # 边列表
+data
+```
+
+# 数据处理
+
+## 将数据框data转换成矩阵data_matrix
+
+```{r}
+# 转换成边列表（邻接名单）的形式，as.matrix()在这里还是起到了转换成可以处理的邻接名单形式
+data_matrix <- as.matrix(data)
+data_matrix
+```
+
+## 将矩阵data_matrix转换成网络格式（2种方法）
+
+### 方法一：使用network包构建网络data_network
+
+```{r}
+# igraph包，将边列表（邻接名单）转换成邻接矩阵（这一步有些多此一举，可以不要）
+data_adjacency_matrix <- get.adjacency(graph.edgelist(data_matrix))
+data_adjacency_matrix
+```
+
+```{r}
+# write.table(data_adjacency_matrix,"邻接矩阵.csv",row.names=TRUE,col.names=TRUE,sep=",")
+```
+
+```{r}
+# 使用network包构建网络将矩阵或邻接名单转换成网络，as.network
+# data_network <- as.network(data_matrix, directed = TRUE) # 转换成网络时，不保留边的权重，这个是可以的
+
+# vertices = attribute参数可以直接导入节点属性的数据框，前面第一个参数需要是数据框格式的边列表名单data，而不是矩阵格式的边列表名单data_matrix
+# data_network <- as.network(data, vertices = attribute, directed = TRUE, multiple = TRUE) 
+
+data_network <- as.network(data_matrix, directed = TRUE, multiple = TRUE) # 转换成网络时，保留边的权重：multiple = TRUE
+data_network
+
+# as.network给出的网络自动做了二值化处理。
+# 如果不想二值化，就需要添加额外的参数：multiple = TRUE，然后使用边列表矩阵（邻接名单），而非邻接矩阵
+```
+
+### 方法二：使用igraph包构建网络data_matrix_igraph_network
+
+```{r}
+# 使用igraph包构建网络，graph.edgelist，参考文档见如下
+# https://bookdown.org/markhoff/social_network_analysis/your-first-network.html#creating-data-in-excel
+data_matrix_igraph_network <- graph.edgelist(data_matrix, directed=TRUE)
+data_matrix_igraph_network
+# 这里的数据网络没有做二值化处理
+```
+
+```{r}
+# graph.density(data_matrix_igraph_network)
+network.density(data_network)
+```
+
+# 导入节点属性数据
+
+```{r}
+# data_network添加属性数据，读取存储着属性的文件
+attribute <- read.csv('332家媒体节点属性.csv')
+```
+
+```{r}
+# 下面的代码就是把属性添加到节点上
+data_network %v% 'sentiment' <- attribute$sentilean
+data_network %v% 'country' <- attribute$country
+data_network %v% 'inregion' <- attribute$inregion
+data_network
+```
+
+
+# 网络绘图
+
+```{r}
+plot(data_network, vertex.col = 'inregion')
+```
+
+## igraph包中的绘图函数及各种参数
+
+```{r}
+# igraph 有一组布局函数，当传递给网络对象时，会返回一个坐标数组，用于绘制该网络。
+# 这些坐标应保存到一个单独的 R 对象中，然后在绘图函数中调用。
+# 它们的格式都是：layout DOT algorithm name。例如，layout.kamada.kawai() 或 layout.fruchterman.reingold()
+fruchtermanLayout <- layout.fruchterman.reingold(data_matrix_igraph_network)
+```
+
+```{r}
+# 或者，如果我们想去掉标签，可以直接将 vertex.label 设置为 NA。
+plot(data_matrix_igraph_network, layout = fruchtermanLayout,
+     vertex.size = 5, vertex.color = "tomato", vertex.frame.color = NA,
+     vertex.label.cex = .1, vertex.label.color = "black",
+     edge.curved = .1, edge.arrow.size = .1, edge.width = .7)
+```
+
+# 指数随机图建模
+
+注意： data_matrix_igraph_network 网络是一个 igraph 对象，而不是一个 statnet 对象，所以不能用于ergm()函数中。 不过有人制作了一个软件包，用于将 igraph 对象转换为 statnet，反之亦然 ，该程序包叫- intergraph。install.packages("intergraph"); asNetwork() 可以安装并加载它，但其实没必要，因为根据邻接名单或邻接矩阵可以直接 as.network() 这里仅做一下记录，以备日后使用。\
+[ERGM 常用术语表](https://statnet.org/nme/d2-ergmterms.html)，查询经常用到的内生结构自变量。
+
+```{r}
+# 在拟合模型时，我们可以使用许多潜在的 ERGM 模型terms。您可以通过以下文档查看完整列表：
+# ?ergm.terms
+```
+
+## 拟合模型前的准备
+
+拟合模型前，先跑一下summary函数，是返回模型中网络统计量的数值。 正如 Statnet 开发团队所指出的： 在使用 ERGM 拟合任何模型之前，最好先运行 summmary 命令。这相当于 ERGM 对协变因素进行一些描述性分析。这可以帮助您确保了解项所代表的含义，还可以帮助标记会导致不良建模结果的潜在问题。
+
+```{r}
+summary(data_network ~ edges + mutual + triangle + transitive + nodematch('sentiment') + nodematch('country'))
+```
+
+```{r}
+```
+
+## 正式拟合模型
+
+### 只有内生结构变量
+
+从最基础的边模型开始：ergm(data_network \~ edges)，一般都是从这里开始。然后慢慢加其他变量。 edges（代表网络中的边的总数）； mutual（考察联系的互惠倾向，即"互惠性"）
+
+```{r}
+set.seed(001) # 使用 set.seed() 函数，并将值设置为001，这样我们每次都能得到相同的结果。
+
+# 使用ergm()，括号里的第一个参数，既可以是网络对象，也可以是能够转换成网络对象的矩阵，而且总是二值的
+# data_network_model1 <- ergm(data_network ~ edges + mutual + nodefactor('sentiment') + nodefactor('country'))
+
+data_network_model1 <- ergm(data_network ~ edges)
+
+# 输出模型概要
+summary(data_network_model1)
+```
+
+由于 ERGM 预测了网络连边的存在，其估计值表明了每种联系对网络连边存在的重要性，因此估计系数可以用类似于逻辑回归的术语来解释。也就是说，正的显著系数表明，在控制模型中所有其他参数的情况下，观察到的网络中的相应参数（如互惠联系）的出现超出了偶然的预期，从而增加了出现连边的可能性，反之亦然。
+
+经过多次迭代，我们发现我们的模型最终收敛，并表明edges和mutual项的估计值在统计上是显著的。正如 Carolan（2014）所指出的，边参数的负估计值意味着连边的概率相对较低。另一方面，互惠参数在我们的模型中为 4.24，表明连边有很强的互惠倾向。
+
+现在，让我们添加一个有关三角形的参数项。由于有向网络中存在各种可能的"三角形"，因此对传递性或社交网络中的"朋友的朋友"现象建模既需要大量计算，又非常容易出现模型退化（model degeneracy），即当模型达到模型中参数的预期值时，模型无法收敛。
+
+三角形（triangles）和传递性（transitive）等传递性的 Ergm 术语尤其容易导致模型退化。幸运的是，{ergm}软件包包含了一种"更稳健的三角形建模方法：几何加权边共享伙伴项（GWESP）"。
+
+让我们按照 Statnet 教程"模型失效时的情况"一节中建议的默认值将 gwesp 项添加到我们的模型中，并先看看摘要：（在我这里行不通，但gwdsp可以）
+
+```{r}
+# set.seed(001)
+# data_network_model2 <- ergm(data_network ~ edges + gwdsp(0.25, fixed=T))
+# summary(data_network_model2)
+```
+
+```{r}
+set.seed(001)
+data_network_model2 <- ergm(data_network ~ edges + mutual)
+summary(data_network_model2)
+```
+
+要想让gwesp跑得通，需要调整控制的参数值：control = control.ergm(MCMLE.density.guard = exp(4))\
+运行速度很慢
+
+```{r}
+# data_network_model3 <- ergm(data_network ~ edges + gwesp(0.25, fixed = T), control = control.ergm(MCMLE.density.guard = exp(4)))
+# summary(data_network_model3)
+```
+
+```{r}
+# data_network_model3 <- ergm(data_network ~ edges + mutual + idegree(1:6) + odegree(1:6))
+# summary(data_network_model3)
+```
+
+### 开始添加节点属性变量
+
+
+下面是一个比较复杂的模型了，照例，拟合模型前，先跑一下summary函数，返回模型中网络统计量的数值。
+
+```{r}
+summary(data_network ~ edges + mutual + gwesp(0.25, fixed = T) + gwdsp(0.25, fixed = T) + idegree(1:6) + odegree(1:6) +
+                              nodeifactor('sentiment') + nodeofactor('sentiment') + nodeifactor('inregion') + nodeofactor('inregion') +
+                              nodematch('sentiment') + nodematch('country') + nodematch('inregion'))
+```
+
+```{r}
+set.seed(001)
+data_network_model4 <- ergm(data_network ~ edges + mutual +
+                              nodeifactor('sentiment', base=2) + nodeofactor('sentiment', base=2) +
+                              nodeifactor('inregion', base=2) + nodeofactor('inregion', base=2))
+
+summary(data_network_model4)
+```
+
+
+```{r}
+set.seed(001)
+data_network_model5 <- ergm(data_network ~ edges + mutual +
+                              nodeifactor('sentiment', base=2) + nodeofactor('sentiment', base=2) +
+                              nodeifactor('inregion', base=2) + nodeofactor('inregion', base=2) +
+                              nodematch('sentiment', diff=T) +
+                              nodematch('country') +
+                              nodematch('inregion'))
+
+summary(data_network_model5)
+```
+
+
+```{r}
+set.seed(001)
+data_network_model7 <- ergm(data_network ~ edges + mutual + gwdsp(0.25, fixed = T) +
+                              mutual(same='sentiment') +
+                              nodeifactor('sentiment') + nodeofactor('sentiment') +
+                              nodeifactor('inregion') + nodeofactor('inregion') +
+                              nodematch('sentiment') +
+                              nodematch('country') +
+                              nodematch('inregion'))
+
+summary(data_network_model7)
+```
+
+```{r}
+set.seed(001)
+data_network_model8 <- ergm(data_network ~ edges + mutual + gwdsp(0.25, fixed = T) +
+                              nodeifactor('sentiment', base=2) + nodeofactor('sentiment', base=2) +
+                              nodeifactor('inregion', base=2) + nodeofactor('inregion', base=2) +
+                              nodematch('sentiment', diff=T) +
+                              nodematch('country') +
+                              nodematch('inregion'))
+
+summary(data_network_model8)
+```
+
+
+# 模型拟合优度检验和模型诊断
+
+## 模型拟合优度检验
+
+```{r}
+# 模型拟合优度检验
+data_network_model8_gof <- gof(data_network_model8)
+data_network_model8_gof
+plot(data_network_model8_gof)
+```
+
+## 模型诊断
+
+```{r}
+# 模型诊断
+par(mar = c(2.1, 2.1, 2.1, 2.1))
+mcmc.diagnostics(data_network_model8)
+```
+
+```{r}
+
+```
+
+```{r}
+```

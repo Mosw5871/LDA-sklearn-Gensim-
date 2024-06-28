@@ -1,0 +1,212 @@
+---
+title: "一带一路时间序列分析"
+author: "寞"
+date: "2023-09-21"
+output: html_document
+---
+
+# 导入程序包
+
+```{r}
+library(xts)
+library(tseries)
+library(vars)
+```
+
+# 读取数据
+
+一个数据框
+```{r}
+data <- read.csv('TimeSeries_ALL.csv')
+# data
+```
+
+# 将数据转换成时间序列
+
+数据框转换成时间序列
+```{r}
+data$date <- as.Date(data$date)
+data_ts <- as.xts(data)
+```
+
+## 绘图查看
+
+```{r}
+plot(data_ts)
+```
+
+```{r}
+plot(data_ts, multi.panel = TRUE, yaxis.right = FALSE, 
+     main = 'Tweets Counts (log transferede)', 
+     grid.ticks.on = 'years', grid.ticks.lwd = 0.3)
+```
+
+```{r}
+# data$date <- as.Date(data$date)
+# data_ts <- xts(data[c('China','In', 'Out')], data$date)
+# data_ts
+# data_ts <- ts(data_ts)
+```
+
+```{r}
+data_ts2 <- ts(data_ts)
+plot(data_ts2, main = 'Tweets Counts')
+```
+# 对数据进行对数转换
+
+```{r}
+data_ts$China <- log(data_ts$China + 1)
+data_ts$In <- log(data_ts$In + 1)
+data_ts$Out <- log(data_ts$Out + 1)
+```
+
+## 画图查看对数转换数据的样子
+
+```{r}
+plot(ts(data_ts), main = 'Tweets Counts (log transferede)')
+```
+# 单位根检验
+
+包括了各种程序包的各种方法adf、kpss、pp
+```{r}
+adf.test(data_ts$China)
+adf.test(data_ts$In)
+adf.test(data_ts$Out)
+```
+
+```{r}
+kpss.test(data_ts$China)
+kpss.test(data_ts$In)
+kpss.test(data_ts$Out)
+```
+
+```{r}
+summary(ur.df(data_ts$China))
+```
+
+```{r}
+summary(ur.kpss(data_ts$China))
+summary(ur.pp(data_ts$China))
+```
+
+# 协整检验
+
+```{r}
+summary(ca.jo(data_ts))
+```
+
+# VAR建模
+
+```{r}
+VARselect(data_ts, lag.max = 10)  #在10以内选择最优滞后阶数
+```
+
+```{r}
+var_model <- VAR(data_ts, p = 0, lag.max = 7, ic="AIC")
+```
+
+
+```{r}
+summary(var_model)
+```
+## 平稳性检验
+
+```{r}
+var_model_stabil <- stability(var_model)
+plot(var_model_stabil)
+```
+
+## 格兰杰因果检验
+
+```{r}
+causality(var_model, cause = 'China')
+print('###################################################################')
+causality(var_model, cause = 'In')
+print('###################################################################')
+causality(var_model, cause = 'Out')
+```
+
+
+```{r}
+grangertest(data_ts$China ~ data_ts$In, order = 7)
+grangertest(data_ts$In ~ data_ts$China, order = 7)
+print('###################################################################')
+grangertest(data_ts$China ~ data_ts$Out, order = 7)
+grangertest(data_ts$Out ~ data_ts$China, order = 7)
+print('###################################################################')
+grangertest(data_ts$In ~ data_ts$Out, order = 7)
+grangertest(data_ts$Out ~ data_ts$In, order = 7)
+```
+
+
+## 脉冲响应分析
+
+### 中国作为冲击因素，In和Out作为响应者
+
+#### 中国-正交脉冲响应
+```{r}
+var_model_oirf_China <- irf(var_model, impulse = "China", response = c("In", "Out"), n.ahead = 20,
+                     ortho = TRUE, cumulative = F, boot = TRUE,
+                     ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_oirf_China)
+print(var_model_oirf_China)
+```
+
+#### 中国-累积正交脉冲响应
+
+```{r}
+var_model_coirf_China <- irf(var_model, impulse = "China", response = c("In", "Out"), n.ahead = 20,
+                     ortho = TRUE, cumulative = TRUE, boot = TRUE,
+                     ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_coirf_China)
+print(var_model_coirf_China)
+```
+### In作为冲击因素，中国和Out作为响应者
+
+#### In-正交脉冲响应
+
+```{r}
+var_model_oirf_In <- irf(var_model, impulse = "In", response = c("China", "Out"), n.ahead = 20,
+                     ortho = TRUE, cumulative = F, boot = TRUE,
+                     ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_oirf_In)
+print(var_model_oirf_In)
+```
+
+
+#### In-累积正交脉冲响应
+
+```{r}
+var_model_coirf_In <- irf(var_model, impulse = "In", response = c("China", "Out"), n.ahead = 20,
+                     ortho = TRUE, cumulative = TRUE, boot = TRUE,
+                     ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_coirf_In)
+print(var_model_coirf_In)
+```
+### Out作为冲击因素，中国和In作为响应者
+
+#### Out-正交脉冲响应
+
+```{r}
+var_model_oirf_Out <- irf(var_model, impulse = "Out", response = c("China", "In"), n.ahead = 20,
+                     ortho = TRUE, cumulative = F, boot = TRUE,
+                     ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_oirf_Out)
+print(var_model_oirf_Out)
+```
+
+
+#### Out-累积正交脉冲响应
+
+```{r}
+var_model_coirf_Out <- irf(var_model, impulse = "Out", response = c("China", "In"), n.ahead = 20, ortho = TRUE, cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100, seed = 001)
+
+plot(var_model_coirf_Out)
+print(var_model_coirf_Out)
+```
+

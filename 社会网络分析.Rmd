@@ -1,0 +1,129 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(igraph)
+```
+
+
+```{r}
+data <- read.csv("/Users/shiwei/Desktop/研究论文/一带一路回音室/1993用户边列表43692条边.csv")
+```
+
+
+```{r}
+head(data)
+```
+
+
+```{r}
+# 转换成边列表（邻接名单）的形式，as.matrix()在这里还是起到了转换成可以处理的邻接名单形式
+data_matrix <- as.matrix(data)
+head(data_matrix)
+```
+
+
+```{r}
+data_network <- graph.edgelist(data_matrix, directed = TRUE)
+# 去除自环
+data_network <- simplify(data_network, remove.loops = TRUE)
+data_network
+```
+
+
+```{r}
+in_degree <- degree(data_network, mode = "in")
+out_degree <- degree(data_network, mode = "out")
+# betweenness_centrality <- betweenness(data_network, directed = TRUE)
+
+head(in_degree)
+head(out_degree)
+# head(betweenness_centrality)
+```
+
+
+```{r}
+in_degree_distribution <- degree.distribution(data_network, mode = "in")
+out_degree_distribution <- degree.distribution(data_network, mode = "out")
+plot(in_degree_distribution)
+```
+
+
+```{r}
+graph.density(data_network)
+```
+
+
+```{r}
+# 查找度值大于等于3的节点
+# high_degree_nodes <- V(data_network)[degree(data_network, mode = "in") >= 2 & degree(data_network, mode = "out") >= 2]
+high_degree_nodes <- V(data_network)[degree(data_network) >= 2]
+# 创建一个新的子图，仅包含高度节点和与之相关的边
+subgraph <- delete.vertices(data_network, which(!V(data_network) %in% high_degree_nodes))
+```
+
+
+```{r}
+subgraph
+```
+
+
+```{r}
+# 将图转换为邻接矩阵
+adjacency_matrix <- as_adjacency_matrix(subgraph, sparse = FALSE)
+```
+
+```{r}
+# 将图转换为边列表
+edgelist_matrix <- as_edgelist(subgraph)
+```
+
+```{r}
+# write.graph(subgraph, "network_graph.gml", format = "gml")
+```
+
+
+```{r}
+write.csv(edgelist_matrix, '/Users/shiwei/Desktop/研究论文/一带一路回音室/度值在2以上的节点边列表537-5047.csv')
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+

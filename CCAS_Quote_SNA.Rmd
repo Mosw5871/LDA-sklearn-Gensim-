@@ -1,0 +1,283 @@
+---
+title: "CCAS_Quote_Social Network Analysis"
+output: html_notebook
+# tutorial：https://bookdown.org/josephine_lukito/bookdown-demo/
+---
+
+```{r}
+library(igraph)
+library(tidyverse)
+```
+
+```{r}
+data <- read_csv("China-Central_Asia_Summit.csv")
+```
+
+```{r}
+datda_frame <- data.frame(data$author_username, data$quoted_username)
+```
+
+```{r}
+# 删除NA值
+datda_frame <- na.omit(datda_frame)
+```
+
+```{r}
+# 构建有向加权网络：graph_from_data_frame
+data_network <- graph_from_data_frame(datda_frame, directed = TRUE)
+```
+
+```{r}
+summary(data_network) # 查看节点和边数
+```
+
+# 网络可视化
+```{r}
+plot(data_network, vertex.label = NA)
+```
+
+这里使用的是plot函数进行绘图，plot是范型函数，在这里调用plot其实是调用plot.graph，这里介绍一下绘图的参数：
+
+NODES
+vertex.color 节点颜色
+vertex.frame.color 节点边框颜色
+vertex.shape “无”，“圆圈”，“方形”，“csquare”，“矩形”， “crectangle”，“vrectangle”，“pie”，“raster”或“sphere”之一
+vertex.size 节点大小（默认为15）
+vertex.size2 节点的第二个大小（例如，对于矩形）
+vertex.label 用于标记节点的字符向量
+vertex.label.family 标签的字体系列（例如“Times”，“Helvetica”）
+vertex.label.font 字体：1平原，2粗体，3，斜体，4粗体斜体，5个符号
+vertex.label.cex 字体大小（乘法因子，取决于设备）
+vertex.label.dist 标签和顶点之间的距离
+vertex.label.degree 标签相对于顶点的位置， 其中0为右，“pi”为左，“pi / 2”在下方，“ - pi / 2”在上方 EDGES
+edge.color 边缘颜色
+edge.width 边缘宽度，默认为1
+edge.arrow.size 箭头大小，默认为1
+edge.arrow.width 箭头宽度，默认为1
+edge.lty 线型，可以是0或“空白”，1或“实心”，2或“虚线”， 3或“点缀”，4或“dotdash”，5或“longdash”，6或“twodash”
+edge.label 用于标记边缘的字符向量
+edge.label.family 标签的字体系列（例如“Times”，“Helvetica”）
+edge.label.font 字体：1平原，2粗体，3，斜体，4粗体斜体，5个符号
+edge.label.cex 边标签的字体大小
+edge.curved 边缘曲率，范围0-1（FALSE设置为0，TRUE设置为0.5）
+arrow.mode 矢量指定边是否应该有箭头， 可能的值：0没有箭头，1后退，2前进，3两者
+
+```{r}
+par(mfrow = c(1, 2), mar = c(0, 0, 0, 0))
+
+plot(data_network,
+     vertex.label = NA, vertex.color = 'blue', vertex.frame.color = 'blue',
+     layout = layout.fruchterman.reingold,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)) * 1.5 + 1,
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+
+plot(data_network,
+     vertex.label = NA, vertex.color = 'blue', vertex.frame.color = 'blue',
+     layout = layout.kamada.kawai,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)) * 1.5 + 1,
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+# 社区检测
+## 基于边中介性的（Newman-Girvan）
+```{r}
+data_cluster_edge_bet <- cluster_edge_betweenness(data_network)
+data_cluster_random_walk <- cluster_walktrap(data_network)
+data_cluster_infomap <- cluster_infomap(data_network)
+
+data_cluster_edge_bet
+data_cluster_random_walk
+data_cluster_infomap
+```
+
+
+```{r}
+par(mar=c(0,0,0,0))
+
+plot(data_cluster_edge_bet, data_network,
+     vertex.label = NA,
+     layout = layout.fruchterman.reingold,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)),
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+
+
+```{r}
+par(mar=c(0,0,0,0))
+
+plot(data_cluster_random_walk, data_network,
+     vertex.label = NA,
+     layout = layout.fruchterman.reingold,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)),
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+
+
+```{r}
+par(mar=c(0,0,0,0))
+
+plot(data_cluster_infomap, data_network,
+     vertex.label = NA,
+     layout = layout.fruchterman.reingold,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)),
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+# 寻找联通子群
+
+```{r}
+## retain only the connected component
+data_connected_network <- induced.subgraph(data_network, subcomponent(data_network, 1))
+par(mar=c(0,0,0,0))
+plot(data_connected_network,
+     vertex.label = NA, vertex.color = 'blue', vertex.frame.color = 'blue',
+     layout = layout.kamada.kawai,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)) * 1.5 + 1,
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+
+
+```{r}
+# connected components, a group of nodes that are connected to each other, but not to the rest of the nodes
+# components(data_network) 
+subcomponent(data_network, 1) # single giant connected component that includes most nodes
+```
+# K-core 分解
+
+identify the core and the periphery of the network
+
+A k-core is a maximal subnet of a network such that all nodes have at least degree K.
+
+```{r}
+coreness(data_network)
+```
+
+
+```{r}
+which(coreness(data_network)==3) # what is the core of the network?
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+# 网络指标值计算
+
+## 非加权度数 
+```{r}
+# data.frame(degree(data_network))
+# data.frame(degree(data_network, mode="in"))
+# data.frame(degree(data_network, mode="out"))
+data.frame(sort(degree(data_network, mode="in"), decreasing = TRUE))
+data.frame(sort(degree(data_network, mode="out"), decreasing = TRUE))
+data.frame(sort(degree(data_network), decreasing = TRUE))
+```
+
+## 加权度数
+```{r}
+data.frame(sort(strength(data_network, mode="in"), decreasing = TRUE))
+data.frame(sort(strength(data_network, mode="out"), decreasing = TRUE))
+data.frame(sort(strength(data_network), decreasing = TRUE))
+```
+
+
+我们还可以使用这些信息来使网络更加集中。下面，我们使用度中心性，删除所有度中心度为1或更低的节点
+（即删除度度中心度得分为1的节点）。我们还将使用igraph::simplify()，这是一个删除循环和冗余边缘的函数。
+
+```{r}
+data_network_degree2 <- delete.vertices(data_network, which(degree(data_network) < 4))
+par(mar=c(0,0,0,0))
+plot(data_network_degree2,
+     vertex.color = 'blue',
+     vertex.frame.color = 'blue',
+     layout = layout.kamada.kawai,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)) * 1.5 + 1,
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'black')
+```
+
+
+```{r}
+neighbors(data_network, "CGTNOfficial", mode = "in") # 谁引用了CGTNOfficial
+neighbors(data_network, "CGTNOfficial", mode = "out") # CGTNOfficial引用了谁
+neighbors(data_network, "XHNews", mode = "in") # 谁引用了XHNews
+neighbors(data_network, "XHNews", mode = "out") # XHNews引用了谁
+neighbors(data_network, "ChinaDaily", mode = "in") # 谁引用了ChinaDaily
+neighbors(data_network, "ChinaDaily", mode = "out") # ChinaDaily引用了谁
+```
+
+
+```{r}
+# data.frame(betweenness(data_network))
+data.frame(sort(betweenness(data_network), decreasing = TRUE))
+```
+
+
+```{r}
+# data.frame(closeness(data_network))
+data.frame(sort(closeness(data_network), decreasing = TRUE))
+```
+虽然中间和亲密的中心是相似的，但它们并不相同。
+Betweenness的重点是其他节点对该节点的依赖程度。
+closeness集中在节点与其他节点的独立程度上。
+
+```{r}
+# data.frame(eigen_centrality(data_network)$vector)
+data.frame(sort(eigen_centrality(data_network)$vector, decreasing = TRUE))
+```
+
+
+```{r}
+# data.frame(page_rank(data_network)$vector)
+data.frame(sort(page_rank(data_network)$vector, decreasing = TRUE))
+```
+
+
+```{r}
+neighbors(data_network, v = which(V(data_network)$name=="XHNews"))
+```
+
+
+```{r}
+ego(data_network, order=2, nodes=which(V(data_network)$name=="XHNews"))
+```
+
+```{r}
+# diameter is the length of the longest path (in number of edges) between two nodes.
+diameter(data_network, directed = TRUE)
+get_diameter(data_network, directed = TRUE, weights = NA)
+```
+
+
+```{r}
+# mean_distance is the average number of edges between any two nodes in the network.
+mean_distance(data_network, directed = TRUE)
+```
+```{r}
+# edge_density is the proportion of edges in the network over all possible edges that could exist.
+edge_density(data_network)
+```
+
+
+```{r}
+reciprocity(data_network)
+```
+
+
+```{r}
+transitivity(data_network)
+```
+
+
+```{r}
+```
+
+

@@ -1,0 +1,93 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(xts)
+library(tseries)
+library(vars)
+library(tidyverse)
+```
+
+
+```{r}
+data <- read_csv('data_ts.csv')
+```
+
+```{r}
+data$full_date <- as.Date(data$full_date)
+```
+
+
+```{r}
+data_ts <- xts(data[, c('GroupB', 'GroupD')], order.by = data$full_date)
+```
+
+
+```{r}
+plot(data_ts)
+```
+
+
+```{r}
+# data_ts$GroupB <- as.numeric(data_ts$GroupB)
+# data_ts$GroupD <- as.numeric(data_ts$GroupD)
+```
+
+
+```{r}
+plot(ts(data_ts))
+```
+
+
+```{r}
+data_ts$GroupB <- log(data_ts$GroupB + 1)
+data_ts$GroupD <- log(data_ts$GroupD + 1)
+```
+
+```{r}
+plot(ts(data_ts)) # 对数转换后的图，差不太多，没什么问题
+```
+
+
+```{r}
+adf.test(data_ts$GroupB)
+adf.test(data_ts$GroupD)
+```
+
+
+```{r}
+diff_B <- diff(data_ts$GroupB) # 存储差分序列diff_B
+adf.test(diff_B[-1, ]) # 去掉第一个值NA，从第二个值开始算起
+```
+
+
+```{r}
+diff_D <- diff(data_ts$GroupD) # 存储差分序列diff_D
+adf.test(diff_D[-1, ]) # 去掉第一个值NA，从第二个值开始算起
+```
+
+
+```{r}
+plot(diff_B[-1, ])
+plot(diff_D[-1, ])
+# 两个差分序列都是平稳序列，也可以用差分序列做格兰杰
+```
+
+
+```{r}
+summary(ca.jo(data_ts)) # 协整检验，满足协整，可以直接用原序列做格兰杰(r <= 1时, p < 0.05)
+```
+
+
+```{r}
+grangertest(data_ts$GroupB ~ data_ts$GroupD)
+```
+
+```{r}
+grangertest(data_ts$GroupD ~ data_ts$GroupB)
+```
+

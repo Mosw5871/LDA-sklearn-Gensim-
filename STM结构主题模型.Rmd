@@ -1,0 +1,200 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+教程：
+来自GitHub<https://github.com/dondealban/learning-stm>
+来自Warin, Thierry. 2020<https://warin.ca/shiny/stm/#section-the-structural-topic-model>
+
+```{r}
+library('stm')
+library(wordcloud)
+```
+
+
+```{r}
+# Link spreadsheet:
+# http://scholar.princeton.edu/sites/default/files/bstewart/files/poliblogs2008.csv
+
+data <- read.csv("第3组的推文.csv")
+```
+
+# 数据清洗
+在建立模型之前，对文本数据进行一些处理通常是有用的。最常见的处理步骤是词干处理（将单词还原为词根形式）、去掉标点符号和删除停顿词（如the、is、at）。textProcessor 函数通过使用 stm 软件包，在多种语言中实现了上述每个步骤。
+```{r}
+add_stopwords <- c('belt', 'road', 'one', 
+                   'china', 'chinese', 'silk', 
+                   'new', 'initiative', 'bri', 'beltandroad')
+processed <- textProcessor(data$text, 
+                           metadata = data, 
+                           customstopwords = add_stopwords,
+                           stem = T) 
+out <- prepDocuments(processed$documents, processed$vocab, processed$meta)
+docs <- out$documents
+vocab <- out$vocab
+meta <- out$meta
+```
+
+# 向量化
+读入数据后，使用实用程序 prepDocuments 处理加载的数据，确保其格式正确。prepDocuments 还会根据用户设置的参数 lower.thresh 删除不常用的词语。实用程序 plotRemoved 会绘制不同阈值下删除的词和文档数量。
+
+例如，用户可以使用下面的代码来评估在每个词阈值下，数据集中会有多少词和文档被删除。然后，用户可以在 prepDocuments 中选择自己喜欢的阈值。
+
+重要的是，如果处理过程中出现任何变化，prepDocuments 还会重新索引所有元数据/文档关系。如果文档在预处理过程中被完全删除（例如，因为它只包含稀有词），那么预处理文档也会删除元数据中的相应行。读入并处理文本数据后，检查文档的特征和相关词汇表以确保它们已被正确预处理是很重要的。
+```{r}
+plotRemoved(processed$documents, lower.thresh = seq(1, 200, by = 10))
+```
+```{r}
+out <- prepDocuments(processed$documents, processed$vocab, processed$meta, lower.thresh = 3)
+```
+
+```{r}
+storage <- searchK(out$documents, out$vocab, K = c(3, 10), prevalence = ~ polar, data = out$meta, verbose = FALSE)
+```
+
+
+```{r}
+plot(storage)
+```
+
+# 拟合模型
+```{r}
+poliblogPrevFit <- stm(documents = out$documents, vocab = out$vocab, K = 10, prevalence = ~ polar, max.em.its = 75, data = out$meta, init.type = "Spectral", verbose = FALSE)
+```
+模型设定最多运行 75 次EM迭代（由 max.em.its 控制）。通过近似变分下限的变化来监测收敛情况。一旦迭代之间下限的变化足够小，则认为模型已经收敛。
+
+
+# 固定主题数的模型初始化
+与所有混合成员主题模型一样，后验是难以处理的，也是非凸的，这就产生了一个对初始化敏感的多模式估计问题。换句话说，估计过程得出的答案可能取决于参数的起始值（如特定主题的词语分布）。
+
+stm 软件包提供了两种处理方法：
+
+1. 第一种是使用基于矩方法的初始化，该方法在合理条件下具有确定性和全局一致性（Arora 等人，2013 年；Roberts 等人，2016a）。这就是所谓的谱初始化，因为它使用的是词共现矩阵的谱分解（非负矩阵因式分解）。在实践中，这种初始化非常有用。可以通过在 stm 函数中设置 init.type = "光谱 "来选择。上例中就使用了该选项。这意味着无论设置的种子是什么，生成的结果都是一样的。当词汇量大于 10,000 个单词时，函数会在初始化过程中暂时缩小词汇量。
+
+2. 第二种方法是使用 LDA 的折叠吉布斯采样器的短期运行来初始化模型。为了完整起见，研究人员也可以随机初始化模型，但一般不建议这样做。在实践中，一般建议采用频谱初始化，因为人们发现它能持续产生最佳结果（Roberts 等人，2016a）。
+
+# 为固定数量的主题选择模型
+在不使用频谱初始化的情况下，分析师应该估计许多模型，每个模型来自不同的初始化，然后根据一些单独的标准（下面提供了几种标准）评估每个模型。
+
+选择模型（selectModel）函数可自动完成这一过程，以方便找到具有理想特性的模型。用户可以指定 "运行 "次数，在下面的例子中，"运行 "次数被设为 20 次。selectModel 首先会撒网，让 "运行"（低于 10 次）的模型运行两个 EM 步骤，然后丢弃低似然度的模型。
+
+接下来，默认会返回 20% 可能性最高的模型，然后运行这些模型直到收敛或达到 EM 迭代最大值。请注意，stm 函数的选项可以传递给 selectModel，例如 max.em.its。如果用户希望选择更多的模型来完全运行，也可以在该函数的帮助文件中指定一个选项来设置。
+
+```{r}
+# poliblogSelect <- selectModel(out$documents, out$vocab, K = 20, prevalence = ~rating + s(day), max.em.its = 75, data = out$meta, runs = 20, seed = 8458159)
+```
+
+为了选择一个模型进行进一步研究，用户必须从 selectModel 中选择一个候选模型的输出结果。为此，可以使用 plotModels 来绘制两个分数：每个模型和主题的语义一致性和排他性。这些标准都是针对模型运行中的每个主题计算的。
+
+plotModels 函数计算模型每次运行时所有主题的平均值，并用数字标注模型运行。用户通常会选择在两个维度上都具有理想属性的模型（即平均得分在绘图右上方的模型）。
+
+```{r}
+# plotModels(poliblogSelect, pch = c(1, 2, 3, 4), legend.position = "bottomright")
+```
+
+
+# 查看主题
+通过单词和示例文档了解主题
+有两种方法可供用户探索已估算出的主题。第一种方法是查看与主题相关的单词集。第二种方法是查看估计与每个主题高度相关的实际文档。这两种方法都应该使用。下文将使用通过频谱初始化估算出的 20 个主题模型。
+
+要探索与每个主题相关的词，可以使用标签主题（labelTopics）函数。对于包含内容协变量的模型，也可以使用 sageLabels。这两个函数都会将与每个主题相关的单词打印到控制台。该函数默认打印几种不同类型的单词配置文件，包括最高概率单词和 FREX 单词。
+
+FREX 根据词的总体频率和词在主题中的排他性（计算公式 6 中给出）对词进行加权13。Lift 通过除以词在其他主题中的频率对词进行加权，因此在其他主题中出现频率较低的词权重较高。有关提权的更多信息，请参见 Taddy (2013)。
+
+与 lift 相似，score 也是用该词在主题中的对数频率除以该词在其他主题中的对数频率。有关 score 的更多信息，请参阅 lda R 软件包。为了将这些结果转化为便于在论文中使用的格式，参数类型 = "标签 "的 "STM "对象的绘图方法将把主题词打印到图形设备上。请注意，在本例中指定了标签选项，因为 "STM "对象的绘图方法有几种功能（"视角 "和 "摘要 "选项）。
+
+## 打印主题
+```{r}
+labelTopics(poliblogPrevFit)
+```
+## 主题可视化
+```{r}
+plot(poliblogPrevFit, type = "summary", xlim = c(0, 0.2))
+```
+
+
+## 检查与主题高度相关的文档
+要检查与主题高度相关的文档，可以使用 findThoughts 函数。该函数将打印与每个主题高度相关的文档。
+
+阅读这些文档有助于理解主题的内容并解释其含义。利用 data.table 的语法（Dowle 和 Srinivasan，2017 年），用户还可以使用 findThoughts 根据主题比例对文档进行复杂的查询。
+
+在我们的例子中，出于说明的目的，文档长度限制在前 200 个字符。我们可以看到，主题 6 描述了 2008 年总统大选期间奥巴马和麦凯恩竞选活动的讨论。主题 18 讨论了布什政府。
+
+要将示例文档打印到图形设备上，可以使用 plotQuote。结果如图 4 所示。
+```{r}
+thoughts1 <- findThoughts(poliblogPrevFit, texts = data$text, n = 1, topics = 1)$docs[[1]]
+thoughts2 <- findThoughts(poliblogPrevFit, texts = data$text, n = 1, topics = 4)$docs[[1]]
+par(mfrow = c(1, 2), mar = c(1, 1, 1, 1))
+plotQuote(thoughts1, width = 20, main = "Topic 1")
+plotQuote(thoughts2, width = 20, main = "Topic 4")
+```
+
+# 估算元数据/主题关系
+估算元数据与主题之间的关系是 stm 软件包的核心功能之一。这些关系在验证主题模型的实用性方面也起着关键作用（Grimmer，2010 年；Grimmer 和 Stewart，2013 年）。stm 可以估算 (K - 1) 个单纯形的关系，而提取所有 K 个主题的关系和相关不确定性的主要函数是 estimateEffect。该函数可以模拟一组参数，然后绘制成图。
+
+通常情况下，用户会将用于估算 STM 的相同主题流行率模型传递给 estimateEffect 函数。estimateEffect 函数的语法设计使用户可以指定他们希望用于估算的主题集，然后指定感兴趣的元数据公式。通过调用 "estimateEffect "对象的绘图方法，可以使用不同的估算策略和标准绘图设计功能。
+
+estimateEffect 可以通过多种方式计算不确定性。默认为 "全局"，这将使用组成方法将主题比例的估计不确定性纳入不确定性估计中。如果用户不传播全部的不确定性，例如，为了加快计算时间，可以选择不确定性 ="无"，这通常会导致置信区间变窄，因为它不包括额外的估计不确定性。调用 "estimateEffect "对象的摘要将生成回归表。
+```{r}
+out$meta$polar <- as.factor(out$meta$polar)
+prep <- estimateEffect(1:10 ~ polar, poliblogPrevFit, meta = out$meta, uncertainty = "Global")
+```
+
+
+```{r}
+summary(prep)
+```
+
+
+# 元数据/主题关系可视化
+现在让我们来讨论绘制元数据/主题关系图，因为估算这些关系的能力是 STM 模型的核心优势。核心绘图功能是 "estimateEffect "对象的绘图方法，用于处理 estimateEffect 的输出。
+
+首先，用户必须指定用于计算效应的变量。如果在 estimateEffect 中指定了多个变量，那么所有其他变量都将保持其样本中值。这些参数包括作为协变量函数的属于某一主题的文档的预期比例，或第一差值类型的估计值，其中特定主题的主题流行率在两组（如自由派与保守派）中进行对比。当计算不确定性估计值耗时较多时，和/或因为用户可能希望使用 estimateEffect 中的相同模拟参数绘制不同的相关量时，应运行 estimateEffect 并在绘制之前保存输出。然后就可以绘制输出结果了。
+
+当感兴趣的协变量是二元变量或用户对特定对比感兴趣时，method = "difference" 选项将绘制从一个特定值到另一个特定值的主题比例变化图。图 6 给出了一个例子。对于因子变量，用户可能希望绘制每个水平的边际话题比例（"pointestimate"）。
+```{r}
+plot(prep, covariate = "polar", topics = c(1:10), model = poliblogPrevFit, method = "difference", cov.value1 = "negative", cov.value2 = "positive", xlab = "More Positive ... Negative ", main = "Effect of Positive vs. Negative", verbose.labels = F)
+```
+
+我们看到，与保守派相比，自由派对主题 6 的使用稍多一些，而主题 13 则接近中间位置，但仍偏向保守派。主题 18，即关于布什的讨论，主要与自由派作家有关，这与我们观察到的保守派在布什就任总统后疏远他的趋势一致。
+
+请注意该函数是如何利用本地 plot() 函数中的标准标签选项的。这样，用户就可以自定义标签和绘图的其他功能。请注意，在软件包中，泛型是 plot 函数的杠杆。因此，用户可以简单地使用 plot 并依赖于方法调度。
+
+
+```{r}
+# poliblogContent <- stm(out$documents, out$vocab, K = 20, prevalence =~ rating + s(day), content =~ rating, max.em.its = 75, data = out$meta, init.type = "Spectral")
+# plot(poliblogContent, type = "perspectives", topics = 3)
+```
+
+
+```{r}
+par(mar = c(2, 2, 2, 2))
+plot(poliblogPrevFit, type = "perspectives", topics = c(1, 3))
+```
+
+
+```{r}
+cloud(poliblogPrevFit, topic = 1)
+cloud(poliblogPrevFit, topic = 2)
+cloud(poliblogPrevFit, topic = 3, scale = c(2.5, 1))
+cloud(poliblogPrevFit, topic = 4, scale = c(2.5, 1))
+cloud(poliblogPrevFit, topic = 5, scale = c(2.5, 1))
+cloud(poliblogPrevFit, topic = 6, scale = c(2.5, 1))
+```
+
+
+```{r}
+mod.out.corr <- topicCorr(poliblogPrevFit)
+plot(mod.out.corr)
+```
+
+
+```{r}
+```
+
+
+
+
+
+

@@ -1,0 +1,111 @@
+---
+title: "CCAS_Retweet_Social Network Analysis"
+output: html_notebook
+---
+
+```{r}
+library(igraph)
+library(tidyverse)
+```
+
+```{r}
+data <- read_csv("China-Central_Asia_Summit.csv")
+```
+
+
+```{r}
+datda_frame <- data.frame(data$author_username, data$retweeted_username)
+```
+
+
+```{r}
+# 删除NA值
+datda_frame <- na.omit(datda_frame)
+```
+
+
+```{r}
+# 构建有向加权网络：graph_from_data_frame
+data_network <- graph_from_data_frame(datda_frame, directed = TRUE)
+summary(data_network)
+```
+
+
+```{r}
+data_network_degree4 <- delete.vertices(data_network, which(degree(data_network) < 10))
+data_connected_network <- induced.subgraph(data_network, subcomponent(data_network, 1))
+
+summary(data_network_degree4)
+summary(data_connected_network)
+```
+
+```{r}
+par(mar=c(0, 0, 0, 0))
+
+plot(data_network_degree4,
+     vertex.label = NA, vertex.color = 'blue', vertex.frame.color = 'blue',
+     layout = layout.fruchterman.reingold,
+     loop.size = 0, edge.curved = 0.1,
+     vertex.size = log(degree(data_network)) * 1.5 + 1,
+     edge.width = 1, edge.arrow.size = 0.1, edge.color = 'grey')
+```
+
+
+```{r}
+data_cluster <- cluster_edge_betweenness(data_network_degree4)
+```
+
+
+```{r}
+data.frame(sort(degree(data_network, mode="in"), decreasing = TRUE))
+data.frame(sort(degree(data_network, mode="out"), decreasing = TRUE))
+data.frame(sort(degree(data_network), decreasing = TRUE))
+```
+
+
+
+```{r}
+data.frame(sort(betweenness(data_network), decreasing = TRUE))
+```
+
+
+```{r}
+data.frame(sort(closeness(data_network), decreasing = TRUE))
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+

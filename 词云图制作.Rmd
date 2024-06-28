@@ -1,0 +1,113 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tm)
+library(wordcloud)
+library(tidyverse)
+# library(RColorBrewer)
+```
+
+```{r}
+# 导入数据
+data <- read.csv("in_text.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
+# 查看数据结构
+str(data)
+```
+
+
+```{r}
+# 如果 'text' 列不是字符型数据，将其转换为字符型
+data$text <- as.character(data$text)
+```
+
+```{r}
+# 使用tidyverse进行数据清洗和词形还原
+data_processed <- data %>%
+  mutate(text = tolower(text),            # 转换为小写
+         text = str_remove_all(text, "http\\S+|www\\S+|pic.twitter\\S+"),  # 移除URL
+         text = str_remove_all(text, "@\\S+"),  # 移除Twitter用户名
+         text = str_remove_all(text, "[[:punct:]]"),  # 移除标点符号
+         text = str_remove_all(text, "[[:digit:]]"),  # 移除数字
+         text = str_remove_all(text, "\\b\\w{1,2}\\b"),  # 移除长度小于等于2的单词
+         text = str_trim(text),  # 去除首尾空格
+         )
+```
+
+```{r}
+# 查看处理后的数据
+head(data_processed)
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+```
+
+```{r}
+# 自定义停用词列表
+custom_stopwords <- c('belt', 'road', 'one',
+                   'china', 'chinese', 'silk',
+                   'new', 'initiative', 'bri',
+                   'beltandroad', 'obor', 'chinas',
+                   'via','forum','president','will',
+                   'cooperation','countries')
+# # 自定义停用词列表
+# custom_stopwords <- c('belt', 'road', 'one', 
+#                    'china', 'chinese', 'silk', 
+#                    'new', 'initiative', 'bri', 
+#                    'beltandroad', 'obor', 'chinas','via','forum','president','will','cooperation','countries')
+
+# 去除停用词
+data_processed$text <- removeWords(data_processed$text, c(stopwords("en"), custom_stopwords))
+
+```
+
+
+```{r}
+# 去除重复文档
+data_processed <- data_processed[!duplicated(data_processed$text), ]
+```
+
+
+```{r}
+# 将语料库转换为文档词频矩阵
+corpus <- Corpus(VectorSource(data_processed$text))
+dtm <- DocumentTermMatrix(corpus)
+```
+
+
+```{r}
+# 创建词云图
+wordcloud(words = dtm$dimnames$Terms, freq = colSums(as.matrix(dtm)),
+          min.freq = 50, scale = c(3, 0.5))
+```
+
+
+```{r}
+# 获取词频列表
+word_freq_list <- data.frame(word = dtm$dimnames$Terms, freq = colSums(as.matrix(dtm)))
+
+# 排序词频列表
+word_freq_list <- word_freq_list[order(word_freq_list$freq, decreasing = TRUE), ]
+
+# 打印前几行
+head(word_freq_list)
+```
+
+
+```{r}
+```
+
+
